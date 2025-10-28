@@ -15,9 +15,18 @@ def load_hsn(file):
         with pdfplumber.open(file) as pdf:
             text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
         hsn_lines = [line.split("\t") for line in text.split("\n") if line.strip()]
-        return pd.DataFrame(hsn_lines, columns=["HSN Code", "Product Description"])
+        df = pd.DataFrame(hsn_lines)
     else:
-        return pd.read_excel(file)
+        df = pd.read_excel(file)
+
+    # Rename first two columns to standard names
+    if df.shape[1] >= 2:
+        df = df.iloc[:, :2]
+        df.columns = ["HSN Code", "Product Description"]
+    else:
+        raise ValueError("HSN master must have at least two columns.")
+
+    return df
 
 # Cache brochure loading
 @st.cache_data
@@ -50,7 +59,7 @@ if brochure_file:
             lines = load_brochure(brochure_file)
             st.text_area("📄 Extracted Brochure Text", "\n".join(lines), height=300)
 
-            # Match HSN Codes with Enhanced Fuzzy Matching
+            # Match HSN Codes with Top 3 Suggestions
             results = []
             if hsn_data is not None:
                 for line in lines:
@@ -59,27 +68,27 @@ if brochure_file:
                         lot_match = re.search(r"Lot\s*No[:\-]?\s*(\w+)", line, re.IGNORECASE)
                         lot_number = lot_match.group(1) if lot_match else "N/A"
 
-                        best_score = 0
-                        best_match = None
+                        # Score all HSN descriptions
+                        scored_matches = []
                         for _, row in hsn_data.iterrows():
-                            hsn_desc = str(row["Product Description"]).lower()
+                            hsn_desc = str(row.get("Product Description", "")).lower()
                             score = fuzz.token_set_ratio(clean_line, hsn_desc)
-                            if score > best_score:
-                                best_score = score
-                                best_match = row
+                            scored_matches.append((score, row["HSN Code"], row["Product Description"]))
 
-                        if best_match is not None:
+                        # Sort and pick top 3
+                        top_matches = sorted(scored_matches, reverse=True)[:3]
+                        for match in top_matches:
                             results.append({
                                 "Lot Number": lot_number,
                                 "Product Name": line[:30],
                                 "Product Description": line,
-                                "HSN Code": best_match["HSN Code"],
-                                "Match Score": best_score
+                                "HSN Code": match[1],
+                                "Suggested Description": match[2]
                             })
 
                 if results:
                     result_df = pd.DataFrame(results)
-                    st.subheader("📋 Matched HSN Codes")
+                    st.subheader("📋 Top HSN Code Suggestions")
                     st.dataframe(result_df)
 
                     # Export to Excel
