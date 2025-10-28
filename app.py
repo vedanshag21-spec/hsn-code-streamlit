@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import pytesseract
-from PIL import Image
 import pdfplumber
 
 st.set_page_config(page_title="HSN Code Identifier", layout="wide")
@@ -23,16 +21,12 @@ if hsn_file:
     except Exception as e:
         st.error(f"Error reading HSN master file: {e}")
 
-# Upload Brochure File
-brochure_file = st.file_uploader("Upload Product Brochure (Image or PDF)", type=["png", "jpg", "jpeg", "pdf"])
+# Upload Brochure File (PDF only)
+brochure_file = st.file_uploader("Upload Product Brochure (PDF only)", type=["pdf"])
 if brochure_file:
     try:
-        if brochure_file.name.endswith(".pdf"):
-            with pdfplumber.open(brochure_file) as pdf:
-                brochure_text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
-        else:
-            image = Image.open(brochure_file)
-            brochure_text = pytesseract.image_to_string(image)
+        with pdfplumber.open(brochure_file) as pdf:
+            brochure_text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
 
         st.text_area("📄 Extracted Brochure Text", brochure_text, height=300)
 
