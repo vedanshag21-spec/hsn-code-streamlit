@@ -8,9 +8,6 @@ from rapidfuzz import fuzz
 st.set_page_config(page_title="HSN Code Identifier", layout="wide")
 st.title("🔍 HSN Code Identifier Tool")
 
-# Confidence threshold slider
-threshold = st.slider("🔧 Fuzzy Match Confidence Threshold", min_value=50, max_value=100, value=80)
-
 # Cache HSN master loading
 @st.cache_data
 def load_hsn(file):
@@ -71,7 +68,7 @@ if brochure_file:
                                 best_score = score
                                 best_match = row
 
-                        if best_match is not None and best_score >= threshold:
+                        if best_match is not None:
                             results.append({
                                 "Lot Number": lot_number,
                                 "Product Name": line[:30],
@@ -82,7 +79,7 @@ if brochure_file:
 
                 if results:
                     result_df = pd.DataFrame(results)
-                    st.subheader("📋 Matched HSN Codes (Fuzzy)")
+                    st.subheader("📋 Matched HSN Codes")
                     st.dataframe(result_df)
 
                     # Export to Excel
@@ -96,7 +93,7 @@ if brochure_file:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 else:
-                    st.warning("No matches found above the confidence threshold.")
+                    st.warning("No matches found.")
             else:
                 st.warning("Please upload a valid HSN master file first.")
         except Exception as e:
