@@ -3,7 +3,7 @@ import pandas as pd
 import pdfplumber
 import re
 import io
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 
 st.set_page_config(page_title="HSN Code Identifier", layout="wide")
 st.title("🔍 HSN Code Identifier Tool")
@@ -11,20 +11,35 @@ st.title("🔍 HSN Code Identifier Tool")
 # Confidence threshold slider
 threshold = st.slider("🔧 Fuzzy Match Confidence Threshold", min_value=50, max_value=100, value=80)
 
+# Cache HSN master loading
+@st.cache_data
+def load_hsn(file):
+    if file.name.endswith(".pdf"):
+        with pdfplumber.open(file) as pdf:
+            text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
+        hsn_lines = [line.split("\t") for line in text.split("\n") if line.strip()]
+        return pd.DataFrame(hsn_lines, columns=["HSN Code", "Product Description"])
+    else:
+        return pd.read_excel(file)
+
+# Cache brochure loading
+@st.cache_data
+def load_brochure(file):
+    if file.name.endswith(".pdf"):
+        with pdfplumber.open(file) as pdf:
+            text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
+        return text.split("\n")
+    else:
+        df = pd.read_excel(file)
+        return df.astype(str).apply(lambda row: ' '.join(row), axis=1).tolist()
+
 # Upload HSN Master File
 hsn_file = st.file_uploader("Upload HSN Master (Excel or PDF)", type=["xlsx", "xls", "pdf"])
 hsn_data = None
-
 if hsn_file:
     with st.spinner("Reading HSN Master..."):
         try:
-            if hsn_file.name.endswith(".pdf"):
-                with pdfplumber.open(hsn_file) as pdf:
-                    text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
-                hsn_lines = [line.split("\t") for line in text.split("\n") if line.strip()]
-                hsn_data = pd.DataFrame(hsn_lines, columns=["HSN Code", "Product Description"])
-            else:
-                hsn_data = pd.read_excel(hsn_file)
+            hsn_data = load_hsn(hsn_file)
             st.success("✅ HSN Master Loaded")
             st.dataframe(hsn_data)
         except Exception as e:
@@ -32,19 +47,10 @@ if hsn_file:
 
 # Upload Brochure File (Excel or PDF)
 brochure_file = st.file_uploader("Upload Product Brochure (Excel or PDF)", type=["xlsx", "xls", "pdf"])
-brochure_text = ""
-
 if brochure_file:
     with st.spinner("Reading Brochure..."):
         try:
-            if brochure_file.name.endswith(".pdf"):
-                with pdfplumber.open(brochure_file) as pdf:
-                    brochure_text = "\n".join(page.extract_text() for page in pdf.pages if page.extract_text())
-                lines = brochure_text.split("\n")
-            else:
-                brochure_df = pd.read_excel(brochure_file)
-                lines = brochure_df.astype(str).apply(lambda row: ' '.join(row), axis=1).tolist()
-
+            lines = load_brochure(brochure_file)
             st.text_area("📄 Extracted Brochure Text", "\n".join(lines), height=300)
 
             # Match HSN Codes with Enhanced Fuzzy Matching
